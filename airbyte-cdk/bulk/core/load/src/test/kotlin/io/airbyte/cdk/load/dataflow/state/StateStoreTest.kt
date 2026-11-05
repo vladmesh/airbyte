@@ -36,6 +36,7 @@ class StateStoreTest {
     fun setUp() {
         stateStore = StateStore(keyClient, histogramStore, stateStatsEnricher)
         every { histogramStore.remove(any()) } returns 1
+        every { keyClient.receivedCount(any()) } returns null
         every { stateStatsEnricher.enrich(any(), any()) } answers { firstArg() }
     }
 

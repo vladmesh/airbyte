@@ -20,6 +20,12 @@ interface StateKeyClient {
     fun getPartitionKey(msg: DestinationRecordRaw): PartitionKey
 
     fun getStateKey(msg: CheckpointMessage): StateKey
+
+    /**
+     * Records this client saw for [key], if it counts them itself. Null means the source's
+     * sourceStats.recordCount is the expected count.
+     */
+    fun receivedCount(key: StateKey): Long? = null
 }
 
 /**
@@ -59,8 +65,18 @@ class InferredStateKeyClient(
 
     private val keyCache = ConcurrentHashMap<DestinationStream.Descriptor, PartitionKey>()
 
+    // Records routed to each window. In STDIO a state covers exactly the records of its stream
+    // that arrived before it, which is not always what the source reports in sourceStats: a
+    // source that reads partitions of one stream concurrently emits them interleaved.
+    private val received = ConcurrentHashMap<PartitionKey, AtomicLong>()
+
     override fun getPartitionKey(msg: DestinationRecordRaw): PartitionKey =
-        currentKey(msg.stream.unmappedDescriptor)
+        currentKey(msg.stream.unmappedDescriptor).also {
+            received.computeIfAbsent(it) { AtomicLong() }.incrementAndGet()
+        }
+
+    override fun receivedCount(key: StateKey): Long =
+        key.partitionKeys.sumOf { received.remove(it)?.get() ?: 0L }
 
     override fun getStateKey(msg: CheckpointMessage): StateKey =
         when (msg) {

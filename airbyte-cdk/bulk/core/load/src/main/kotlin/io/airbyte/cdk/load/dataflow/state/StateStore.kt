@@ -49,7 +49,14 @@ class StateStore(
             requireNotNull(msg.sourceStats) {
                 "sourceStats must be set with recordCount for state message id=${key.id}"
             }
-        histogramStore.acceptExpectedCounts(key, stats.recordCount)
+        val received = keyClient.receivedCount(key)
+        if (received != null && received != stats.recordCount) {
+            log.warn {
+                "State id=${key.id}: source reported ${stats.recordCount} record(s), " +
+                    "$received arrived before it. Expecting $received."
+            }
+        }
+        histogramStore.acceptExpectedCounts(key, received ?: stats.recordCount)
 
         when (msg) {
             is GlobalCheckpoint,
